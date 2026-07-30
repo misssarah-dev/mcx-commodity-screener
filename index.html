@@ -4,99 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MCX Commodity Screener</title>
-<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js">
-// === LIVE TICK-BY-TICK DATA POLLING ===
-const BACKEND_URL = 'https://arlo-c0e69fee.base44.app/functions/fetchMcxTicks';
-let prevPrices = {};
-
-async function fetchTicks() {
-  try {
-    const resp = await fetch(BACKEND_URL);
-    if (!resp.ok) return;
-    const json = await resp.json();
-    if (!json.success || !json.data) return;
-    updateLiveData(json.data);
-  } catch(e) { console.log('Tick fetch error:', e); }
-}
-
-function updateLiveData(data) {
-  // Update ticker
-  const tickerEl = document.getElementById('ticker');
-  if (tickerEl) {
-    tickerEl.innerHTML = [...data, ...data].map(c => {
-      const cls = c.pctChange >= 0 ? 'pos' : 'neg';
-      const arrow = c.pctChange >= 0 ? '▲' : '▼';
-      return '<div class="ticker-item"><span class="sym">'+c.name+'</span> '+fmt(c.ltp)+' <span class="'+cls+'">'+arrow+' '+(c.pctChange>=0?'+':'')+c.pctChange.toFixed(2)+'%</span></div>';
-    }).join('');
-  }
-
-  // Update table rows with flash animation
-  data.forEach(c => {
-    const row = document.querySelector('[data-symbol="'+c.symbol+'"]');
-    if (row) {
-      const cells = row.querySelectorAll('td');
-      const prev = prevPrices[c.symbol];
-      cells[1].textContent = fmt(c.ltp);
-      cells[2].textContent = fmt(c.open);
-      cells[3].textContent = fmt(c.ltp);
-      cells[4].textContent = fmt(c.high);
-      cells[5].textContent = fmt(c.prevClose);
-      const cls = c.pctChange >= 0 ? 'pos' : 'neg';
-      const arrow = c.pctChange >= 0 ? '▲' : '▼';
-      cells[6].className = cls;
-      cells[6].style.fontWeight = '700';
-      cells[6].textContent = arrow+' '+(c.pctChange>=0?'+':'')+c.pctChange.toFixed(2)+'%';
-      // Flash animation on LTP change
-      if (prev !== undefined && c.ltp !== prev) {
-        const flashClass = c.ltp > prev ? 'flash-up' : 'flash-down';
-        cells[1].classList.remove('flash-up','flash-down');
-        void cells[1].offsetWidth;
-        cells[1].classList.add(flashClass);
-      }
-    }
-  });
-
-  // Update OHLC bar
-  const active = data.find(c => c.symbol === currentSymbol);
-  if (active && document.getElementById('ohlc-o')) {
-    document.getElementById('ohlc-o').textContent = fmt(active.open);
-    document.getElementById('ohlc-h').textContent = fmt(active.high);
-    document.getElementById('ohlc-l').textContent = fmt(Math.min(active.open, active.ltp)*0.998);
-    document.getElementById('ohlc-c').textContent = fmt(active.ltp);
-    document.getElementById('ohlc-v').textContent = (Math.floor(Math.random()*50)+30)+'K';
-    const cls = active.pctChange >= 0 ? 'pos' : 'neg';
-    const arrow = active.pctChange >= 0 ? '▲' : '▼';
-    document.getElementById('chart-change').innerHTML = '<span class="'+cls+'">'+arrow+' '+fmt(Math.abs(active.change))+' ('+(active.pctChange>=0?'+':'')+active.pctChange.toFixed(2)+'%)</span>';
-  }
-
-  // Update stats
-  const gainers = data.filter(c => c.pctChange >= 0).length;
-  const losers = data.filter(c => c.pctChange < 0).length;
-  const tiles = document.querySelectorAll('.stat-tile');
-  if (tiles.length >= 2) {
-    tiles[0].querySelector('.val').textContent = gainers;
-    tiles[1].querySelector('.val').textContent = losers;
-  }
-
-  // Update chart last candle close
-  if (candleSeries && chart && active) {
-    const allData = candleSeries.data();
-    if (allData.length > 0) {
-      const lastBar = allData[allData.length - 1];
-      lastBar.close = active.ltp;
-      lastBar.high = Math.max(lastBar.high, active.ltp);
-      candleSeries.update(lastBar);
-    }
-  }
-
-  // Store prev prices
-  data.forEach(c => prevPrices[c.symbol] = c.ltp);
-}
-
-// Start polling every 3 seconds
-fetchTicks();
-setInterval(fetchTicks, 3000);
-</script>
 <style>
 :root {
   --bg: #0d1117;
@@ -111,13 +18,6 @@ setInterval(fetchTicks, 3000);
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, system-ui, sans-serif; }
 body { background: var(--bg); color: var(--text); min-height: 100vh; }
 .pos { color: var(--green); } .neg { color: var(--red); }
-
-/* Ticker */
-.ticker-wrap { overflow: hidden; background: var(--card); border-bottom: 1px solid var(--border); padding: 8px 0; }
-.ticker-track { display: inline-flex; gap: 36px; white-space: nowrap; animation: scroll 28s linear infinite; padding: 0 16px; }
-@keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-.ticker-item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
-.ticker-item .sym { color: var(--muted); font-weight: 600; }
 
 /* Top nav tabs */
 .nav-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding: 0 4px; margin-bottom: 14px; }
@@ -141,18 +41,6 @@ body { background: var(--bg); color: var(--text); min-height: 100vh; }
 .stat-tile .sub { font-size: 12px; font-weight: 600; margin-top: 2px; }
 @media(max-width:768px){ .stats-grid { grid-template-columns: 1fr 1fr; } }
 
-/* Table */
-.table-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 0 16px 14px; }
-table { width: 100%; border-collapse: collapse; }
-th { text-align: right; padding: 9px 12px; font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); }
-th:first-child { text-align: left; }
-td { text-align: right; padding: 12px; font-size: 13px; border-bottom: 1px solid #1c2128; }
-td:first-child { text-align: left; }
-tbody tr { transition: background .2s; cursor: pointer; }
-tbody tr:hover { background: #1c2128; }
-tr.selected { background: rgba(245,158,11,.06); }
-.row-hidden { display: none; }
-
 /* Commodity icon */
 .cmd-icon { width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
 
@@ -160,34 +48,16 @@ tr.selected { background: rgba(245,158,11,.06); }
 .section { display: none; }
 .section.active { display: block; }
 
-/* ===== CHART SECTION ===== */
-.chart-wrapper { padding: 0 16px 14px; }
-.chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-/* Commodity selector row */
+/* TradingView widget containers */
+.tv-widget-wrap { padding: 0 16px 14px; }
+.tv-widget-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.tv-widget-card > div { min-height: 500px; }
+
+/* Chart selector */
 .chart-selector { display: flex; gap: 6px; padding: 12px 14px; flex-wrap: wrap; align-items: center; border-bottom: 1px solid var(--border); }
 .sel-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .2s; }
 .sel-btn:hover { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 12px rgba(245,158,11,.2); }
 .sel-btn.active { background: var(--gold); color: var(--bg); border-color: var(--gold); }
-/* OHLC info bar */
-.ohlc-bar { display: flex; align-items: center; gap: 16px; padding: 10px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.ohlc-bar .ohlc-title { display: flex; align-items: center; gap: 8px; }
-.ohlc-bar .ohlc-title span:first-child { font-size: 14px; font-weight: 700; }
-.ohlc-bar .badge { font-size: 10px; font-weight: 600; color: var(--muted); background: var(--bg); padding: 2px 7px; border-radius: 4px; }
-.ohlc-item { display: flex; align-items: center; gap: 4px; font-size: 12px; }
-.ohlc-item .ohlc-label { color: var(--muted); }
-.ohlc-item .ohlc-val { font-weight: 600; }
-.ohlc-spacer { flex: 1; }
-/* Timeframe row */
-.tf-row { display: flex; gap: 4px; align-items: center; }
-.tf-btn { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer; transition: all .2s; }
-.tf-btn:hover { color: var(--gold); }
-.tf-btn.active { background: rgba(245,158,11,.15); color: var(--gold); border-color: rgba(245,158,11,.4); }
-/* Chart container */
-.chart-canvas-wrap { position: relative; width: 100%; }
-#tv_chart { width: 100%; height: 420px; }
-/* Chart footer */
-.chart-footer { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-top: 1px solid var(--border); }
-.chart-footer span { font-size: 10px; color: var(--muted); }
 
 /* Signal cards */
 .signal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 14px; }
@@ -227,19 +97,30 @@ tr.selected { background: rgba(245,158,11,.06); }
 ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
 .footer { text-align: center; font-size: 10px; color: #484f58; padding: 10px 16px 20px; }
 
-/* Live tick flash */
-@keyframes flash-up { 0% { background: rgba(52,211,153,.2); } 100% { background: transparent; } }
-@keyframes flash-down { 0% { background: rgba(251,113,133,.2); } 100% { background: transparent; } }
-.flash-up { animation: flash-up .4s ease; }
-.flash-down { animation: flash-down .4s ease; }
-.live-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
+/* TradingView ticker override */
+.tradingview-widget-container { overflow: hidden; }
 </style>
 </head>
 <body>
 
-<!-- Ticker -->
-<div class="ticker-wrap">
-  <div class="ticker-track" id="ticker"></div>
+<!-- TradingView Ticker Tape -->
+<div class="tradingview-widget-container">
+  <div class="tradingview-widget-container__widget"></div>
+  <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+  {
+    "symbols": [
+      {"proName": "MCX:GOLD1!", "title": "Gold"},
+      {"proName": "MCX:SILVER1!", "title": "Silver"},
+      {"proName": "MCX:CRUDEOIL1!", "title": "Crude Oil"},
+      {"proName": "MCX:NATURALGAS1!", "title": "Natural Gas"}
+    ],
+    "showSymbolLogo": true,
+    "isTransparent": true,
+    "displayMode": "adaptive",
+    "colorTheme": "dark",
+    "locale": "en"
+  }
+  </script>
 </div>
 
 <!-- HOME -->
@@ -247,70 +128,120 @@ tr.selected { background: rgba(245,158,11,.06); }
   <div class="header">
     <div>
       <h1>MCX Commodity Screener</h1>
-      <p>Live Indian Commodity Market · Multi Commodity Exchange</p>
+      <p>Live Indian Commodity Market · Powered by TradingView</p>
     </div>
     <div style="display:flex;align-items:center;gap:12px;">
       <div style="display:flex;align-items:center;gap:6px;"><span class="pulse-dot"></span><span style="font-size:11px;font-weight:700;color:var(--green);letter-spacing:.05em;">LIVE</span></div>
-      <span style="font-size:11px;color:var(--muted);">Market Open · 30 Jul 2026</span>
+      <span style="font-size:11px;color:var(--muted);">TradingView Real-Time</span>
     </div>
   </div>
+
   <div class="nav-tabs">
     <button class="nav-tab active" data-filter="all">All</button>
     <button class="nav-tab" data-filter="metals">Metals</button>
     <button class="nav-tab" data-filter="energy">Energy</button>
   </div>
+
   <div class="stats-grid">
-    <div class="stat-tile"><div class="label">Gainers</div><div class="val pos">2</div></div>
-    <div class="stat-tile"><div class="label">Losers</div><div class="val neg">2</div></div>
-    <div class="stat-tile"><div class="label">Top Gainer</div><div class="sub" style="color:var(--text);margin-top:4px;">Natural Gas</div><div class="sub pos">+0.49%</div></div>
-    <div class="stat-tile"><div class="label">Top Loser</div><div class="sub" style="color:var(--text);margin-top:4px;">Silver</div><div class="sub neg">-0.72%</div></div>
+    <div class="stat-tile"><div class="label">Commodities</div><div class="val" style="color:var(--gold)">4</div><div class="sub" style="color:var(--muted);font-size:11px;margin-top:2px;">MCX Listed</div></div>
+    <div class="stat-tile"><div class="label">Metals</div><div class="val" style="color:var(--text)">2</div><div class="sub" style="color:var(--muted);font-size:11px;margin-top:2px;">Gold · Silver</div></div>
+    <div class="stat-tile"><div class="label">Energy</div><div class="val" style="color:var(--text)">2</div><div class="sub" style="color:var(--muted);font-size:11px;margin-top:2px;">Crude · Nat Gas</div></div>
+    <div class="stat-tile"><div class="label">Data Source</div><div class="sub" style="color:var(--gold);font-size:13px;font-weight:700;margin-top:4px;">TradingView</div><div class="sub" style="color:var(--muted);font-size:11px;margin-top:2px;">Real-Time MCX</div></div>
   </div>
-  <div class="table-card">
-    <table>
-      <thead><tr>
-        <th>Commodity</th><th>LTP</th><th>Open</th><th>Close</th><th>High</th><th>Prev Close</th><th>% Change</th><th>Trend</th>
-      </tr></thead>
-      <tbody id="table-body"></tbody>
-    </table>
+
+  <!-- TradingView Market Overview (Screener) -->
+  <div class="tv-widget-wrap">
+    <div class="tv-widget-card">
+      <div class="tradingview-widget-container" style="min-height:520px;">
+        <div class="tradingview-widget-container__widget"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-market-overview.js" async>
+        {
+          "colorTheme": "dark",
+          "dateRange": "12M",
+          "showChart": true,
+          "locale": "en",
+          "width": "100%",
+          "height": "100%",
+          "largeChartUrl": "",
+          "isTransparent": true,
+          "showSymbolLogo": true,
+          "plotLineColorGrowing": "rgba(245, 158, 11, 1)",
+          "plotLineColorFalling": "rgba(245, 158, 11, 1)",
+          "gridLineColor": "rgba(33, 38, 45, 1)",
+          "scaleLineColor": "rgba(125, 133, 144, 1)",
+          "belowColor": "rgba(33, 38, 45, 0.5)",
+          "aboveColor": "rgba(245, 158, 11, 0.2)",
+          "tabs": [
+            {
+              "title": "MCX Commodities",
+              "symbols": [
+                {"s": "MCX:GOLD1!", "d": "Gold"},
+                {"s": "MCX:SILVER1!", "d": "Silver"},
+                {"s": "MCX:CRUDEOIL1!", "d": "Crude Oil"},
+                {"s": "MCX:NATURALGAS1!", "d": "Natural Gas"}
+              ]
+            },
+            {
+              "title": "Metals",
+              "symbols": [
+                {"s": "MCX:GOLD1!", "d": "Gold"},
+                {"s": "MCX:SILVER1!", "d": "Silver"}
+              ]
+            },
+            {
+              "title": "Energy",
+              "symbols": [
+                {"s": "MCX:CRUDEOIL1!", "d": "Crude Oil"},
+                {"s": "MCX:NATURALGAS1!", "d": "Natural Gas"}
+              ]
+            }
+          ]
+        }
+        </script>
+      </div>
+    </div>
   </div>
 </div>
 
 <!-- CHART -->
 <div class="section" id="section-chart">
   <div class="header">
-    <div><h1>Chart</h1><p>Candlestick · TradingView Lightweight Charts™</p></div>
-    <span style="font-size:11px;color:var(--muted);">Daily · INR</span>
+    <div><h1>Chart</h1><p>Live MCX Candlestick · Powered by TradingView</p></div>
+    <span style="font-size:11px;color:var(--muted);">Real-Time · INR</span>
   </div>
-  <div class="chart-wrapper">
-    <div class="chart-card">
+  <div class="tv-widget-wrap">
+    <div class="tv-widget-card">
       <!-- Commodity selector -->
-      <div class="chart-selector" id="chart-selector"></div>
-      <!-- OHLC info bar -->
-      <div class="ohlc-bar" id="ohlc-bar">
-        <div class="ohlc-title">
-          <span id="chart-title">Gold</span>
-          <span class="badge">MCX</span>
-        </div>
-        <div class="ohlc-item"><span class="ohlc-label">O</span><span class="ohlc-val" id="ohlc-o">—</span></div>
-        <div class="ohlc-item"><span class="ohlc-label">H</span><span class="ohlc-val pos" id="ohlc-h">—</span></div>
-        <div class="ohlc-item"><span class="ohlc-label">L</span><span class="ohlc-val neg" id="ohlc-l">—</span></div>
-        <div class="ohlc-item"><span class="ohlc-label">C</span><span class="ohlc-val" id="ohlc-c">—</span></div>
-        <div class="ohlc-item"><span class="ohlc-label">Vol</span><span class="ohlc-val" style="color:var(--muted)" id="ohlc-v">—</span></div>
-        <div class="ohlc-spacer"></div>
-        <div class="tf-row">
-          <button class="tf-btn active" data-tf="1M">1M</button>
-          <button class="tf-btn" data-tf="3M">3M</button>
-          <button class="tf-btn" data-tf="6M">6M</button>
-        </div>
+      <div class="chart-selector" id="chart-selector">
+        <button class="sel-btn active" data-symbol="MCX:GOLD1!" data-name="Gold">Gold</button>
+        <button class="sel-btn" data-symbol="MCX:SILVER1!" data-name="Silver">Silver</button>
+        <button class="sel-btn" data-symbol="MCX:CRUDEOIL1!" data-name="Crude Oil">Crude Oil</button>
+        <button class="sel-btn" data-symbol="MCX:NATURALGAS1!" data-name="Natural Gas">Natural Gas</button>
       </div>
-      <!-- Chart canvas -->
-      <div class="chart-canvas-wrap">
-        <div id="tv_chart"></div>
-      </div>
-      <!-- Footer -->
-      <div class="chart-footer">
-        <span>TradingView Lightweight Charts™ v4.2.0</span>
-        <span id="chart-change">—</span>
+      <!-- TradingView Advanced Chart -->
+      <div id="tv-chart-container" style="min-height:500px;">
+        <div class="tradingview-widget-container" style="height:100%;width:100%;">
+          <div class="tradingview-widget-container__widget" id="tv-chart-widget"></div>
+          <script type="text/javascript" id="tv-chart-script" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+          {
+            "autosize": true,
+            "symbol": "MCX:GOLD1!",
+            "interval": "D",
+            "timezone": "Asia/Calcutta",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "enable_publishing": false,
+            "backgroundColor": "#0d1117",
+            "gridColor": "#161b22",
+            "hide_side_toolbar": false,
+            "allow_symbol_change": true,
+            "calendar": false,
+            "studies": ["STD;RSI", "STD;MACD"],
+            "support_host": "https://tradingview.com"
+          }
+          </script>
+        </div>
       </div>
     </div>
   </div>
@@ -320,7 +251,7 @@ tr.selected { background: rgba(245,158,11,.06); }
 <div class="section" id="section-signal">
   <div class="header">
     <div><h1>AI Signal</h1><p>Algorithmic trading signals based on technical indicators</p></div>
-    <span style="font-size:11px;color:var(--muted);">Updated: 11:43 IST</span>
+    <span style="font-size:11px;color:var(--muted);">Updated: 13:25 IST</span>
   </div>
   <div class="signal-grid" id="signal-grid"></div>
 </div>
@@ -354,142 +285,9 @@ tr.selected { background: rgba(245,158,11,.06); }
   </div>
 </div>
 
-<div class="footer">Data: MCX via Angel One · Chart: TradingView Lightweight Charts™ · For informational purposes only. Not investment advice.</div>
+<div class="footer">Data: TradingView Real-Time · MCX Commodities · For informational purposes only. Not investment advice.</div>
 
 <script>
-const commodities = [
-  { name:"Gold", symbol:"MCX:GOLD1!", ltp:141689, open:141850, close:141689, high:141925, prevClose:141781, change:-92, pct:-0.06, expiry:"5 Aug 2026", lot:"100", cat:"metals", icon:"Au", bg:"#b45309", fg:"#fef3c7", spark:[8,6,9,7,10,8,11,9,13], dir:"down" },
-  { name:"Silver", symbol:"MCX:SILVER1!", ltp:215912, open:217500, close:215912, high:217850, prevClose:217479, change:-1567, pct:-0.72, expiry:"4 Sep 2026", lot:"30", cat:"metals", icon:"Ag", bg:"#475569", fg:"#e2e8f0", spark:[4,6,5,8,7,11,10,14,17], dir:"down" },
-  { name:"Crude Oil", symbol:"MCX:CRUDEOIL1!", ltp:8144, open:8098, close:8144, high:8188, prevClose:8114, change:30, pct:0.37, expiry:"19 Aug 2026", lot:"100", cat:"energy", icon:"CL", bg:"#78350f", fg:"#fed7aa", spark:[16,14,15,11,12,9,7,6,4], dir:"up" },
-  { name:"Natural Gas", symbol:"MCX:NATURALGAS1!", ltp:264.10, open:262.50, close:264.10, high:264.50, prevClose:262.80, change:1.30, pct:0.49, expiry:"26 Aug 2026", lot:"1250", cat:"energy", icon:"NG", bg:"#1e3a5f", fg:"#bfdbfe", spark:[15,13,14,10,11,8,6,7,4], dir:"up" }
-];
-
-const fmt = p => "₹" + Number(p).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-// Ticker
-function buildTicker() {
-  const items = [...commodities, ...commodities].map(c => {
-    const cls = c.pct >= 0 ? "pos" : "neg", arrow = c.pct >= 0 ? "▲" : "▼";
-    return `<div class="ticker-item"><span class="sym">${c.name}</span> ${fmt(c.ltp)} <span class="${cls}">${arrow} ${c.pct>=0?"+":""}${c.pct.toFixed(2)}%</span></div>`;
-  }).join("");
-  document.getElementById("ticker").innerHTML = items;
-}
-buildTicker();
-
-// Sparkline
-function sparkline(data, dir) {
-  const w=80,h=24,max=Math.max(...data),min=Math.min(...data),r=max-min||1;
-  const pts = data.map((v,i)=>{const x=(i/(data.length-1))*w;const y=h-((v-min)/r)*h;return x.toFixed(1)+","+y.toFixed(1)}).join(" ");
-  const c = dir==="up"?"#34d399":"#fb7185";
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:inline-block;vertical-align:middle"><polyline points="0,${h} ${pts} ${w},${h}" fill="${c}" fill-opacity="0.08" stroke="none"/><polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
-}
-
-// Table
-const tbody = document.getElementById("table-body");
-commodities.forEach((c,i)=>{
-  const cls = c.pct>=0?"pos":"neg", arrow = c.pct>=0?"▲":"▼";
-  const tr = document.createElement("tr");
-  tr.className = "commodity-row" + (i===0?" selected":"");
-  tr.dataset.symbol = c.symbol; tr.dataset.cat = c.cat; tr.dataset.name = c.name;
-  tr.innerHTML = `<td><div style="display:flex;align-items:center;gap:10px"><span class="cmd-icon" style="background:${c.bg};color:${c.fg}">${c.icon}</span><div><div style="font-size:13px;font-weight:600">${c.name}</div><div style="font-size:10px;color:var(--muted)">Exp: ${c.expiry} · Lot: ${c.lot}</div></div></div></td>
-  <td style="font-weight:600">${fmt(c.ltp)}</td><td>${fmt(c.open)}</td><td>${fmt(c.close)}</td><td>${fmt(c.high)}</td><td style="color:var(--muted)">${fmt(c.prevClose)}</td>
-  <td class="${cls}" style="font-weight:700">${arrow} ${c.pct>=0?"+":""}${c.pct.toFixed(2)}%</td><td>${sparkline(c.spark,c.dir)}</td>`;
-  tbody.appendChild(tr);
-});
-
-// Chart selector buttons
-document.getElementById("chart-selector").innerHTML = commodities.map((c,i)=>`<button class="sel-btn${i===0?" active":""}" data-symbol="${c.symbol}" data-name="${c.name}">${c.name}</button>`).join("");
-
-// Candlestick data generator
-function genCandles(c, days) {
-  days = days || 60;
-  const out=[], start=new Date(); start.setDate(start.getDate()-days);
-  let price = c.ltp*0.93, trend=(c.ltp-price)/days;
-  for(let i=0;i<days;i++){
-    const d=new Date(start); d.setDate(start.getDate()+i);
-    const ds=d.toISOString().split("T")[0];
-    if(i===days-1){
-      const low=Math.min(c.open,c.prevClose)*0.997;
-      out.push({time:ds,open:c.open,high:c.high,low:Math.round(low*100)/100,close:c.ltp});
-    } else {
-      const vol=price*0.012, noise=(Math.sin(i*7.3)+Math.cos(i*3.1))*vol*0.3, ch=trend+noise+(Math.random()-0.5)*vol;
-      const close=price+ch, o=price;
-      const h=Math.max(o,close)+Math.random()*vol*0.6, l=Math.min(o,close)-Math.random()*vol*0.6;
-      out.push({time:ds,open:Math.round(o*100)/100,high:Math.round(h*100)/100,low:Math.round(l*100)/100,close:Math.round(close*100)/100});
-      price=close;
-    }
-  }
-  return out;
-}
-
-let chart=null, candleSeries=null, volSeries=null, chartInited=false, currentSymbol="MCX:GOLD1!", currentName="Gold", currentTF=60;
-
-function updateOHLC(c) {
-  const last = genCandles(c, currentTF).slice(-1)[0];
-  document.getElementById("ohlc-o").textContent = fmt(last.open);
-  document.getElementById("ohlc-h").textContent = fmt(last.high);
-  document.getElementById("ohlc-l").textContent = fmt(last.low);
-  document.getElementById("ohlc-c").textContent = fmt(last.close);
-  document.getElementById("ohlc-v").textContent = (Math.floor(Math.random()*50)+30)+"K";
-  const cls = c.pct>=0?"pos":"neg";
-  const arrow = c.pct>=0?"▲":"▼";
-  document.getElementById("chart-change").innerHTML = `<span class="${cls}">${arrow} ${fmt(Math.abs(c.change))} (${c.pct>=0?"+":""}${c.pct.toFixed(2)}%)</span>`;
-}
-
-function initChart(symbol, name) {
-  const container = document.getElementById("tv_chart");
-  container.innerHTML = "";
-  const c = commodities.find(x => x.symbol === symbol);
-  const w = container.clientWidth || 600;
-  const h = 420;
-
-  chart = LightweightCharts.createChart(container, {
-    width: w,
-    height: h,
-    layout: { background: { color: "#0d1117" }, textColor: "#7d8590" },
-    grid: { vertLines: { color: "#161b22" }, horzLines: { color: "#161b22" } },
-    timeScale: { borderColor: "#21262d", timeVisible: false },
-    rightPriceScale: { borderColor: "#21262d" },
-    crosshair: { mode: 0 },
-    handleScroll: true,
-    handleScale: true,
-  });
-
-  candleSeries = chart.addCandlestickSeries({
-    upColor: "#34d399", downColor: "#fb7185",
-    borderUpColor: "#34d399", borderDownColor: "#fb7185",
-    wickUpColor: "#34d399", wickDownColor: "#fb7185"
-  });
-
-  const data = genCandles(c, currentTF);
-  candleSeries.setData(data);
-
-  volSeries = chart.addHistogramSeries({
-    priceFormat: { type: "volume" },
-    priceScaleId: "vol",
-    color: "rgba(125,133,144,0.3)"
-  });
-  volSeries.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-  volSeries.setData(data.map(d => ({
-    time: d.time,
-    value: Math.floor(Math.random()*80000)+40000,
-    color: d.close >= d.open ? "rgba(52,211,153,0.25)" : "rgba(251,113,133,0.25)"
-  })));
-
-  chart.timeScale().fitContent();
-  document.getElementById("chart-title").textContent = name;
-  updateOHLC(c);
-
-  // Resize observer for responsive chart
-  if (window._chartResizeObserver) window._chartResizeObserver.disconnect();
-  window._chartResizeObserver = new ResizeObserver(() => {
-    if (chart && container.offsetWidth > 0) {
-      chart.applyOptions({ width: container.offsetWidth });
-    }
-  });
-  window._chartResizeObserver.observe(container);
-}
-
 // Section switching
 document.querySelectorAll(".nav-item").forEach(item => {
   item.addEventListener("click", () => {
@@ -498,23 +296,6 @@ document.querySelectorAll(".nav-item").forEach(item => {
     const sec = item.dataset.section;
     document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
     document.getElementById("section-" + sec).classList.add("active");
-
-    if (sec === "chart") {
-      if (!chartInited) {
-        requestAnimationFrame(() => {
-          initChart(currentSymbol, currentName);
-          chartInited = true;
-        });
-      } else {
-        requestAnimationFrame(() => {
-          const container = document.getElementById("tv_chart");
-          if (chart && container.offsetWidth > 0) {
-            chart.applyOptions({ width: container.offsetWidth, height: 420 });
-            chart.timeScale().fitContent();
-          }
-        });
-      }
-    }
   });
 });
 
@@ -523,44 +304,63 @@ document.querySelectorAll(".nav-tab").forEach(tab => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".nav-tab").forEach(t => t.classList.remove("active"));
     tab.classList.add("active");
-    const f = tab.dataset.filter;
-    document.querySelectorAll(".commodity-row").forEach(row => {
-      row.classList.toggle("row-hidden", f !== "all" && row.dataset.cat !== f);
-    });
   });
 });
 
-// Chart commodity selector
+// Chart commodity selector — recreate TradingView widget with new symbol
 document.querySelectorAll(".sel-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".sel-btn").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
-    currentSymbol = btn.dataset.symbol;
-    currentName = btn.dataset.name;
-    initChart(currentSymbol, currentName);
-  });
-});
 
-// Timeframe selector
-document.querySelectorAll(".tf-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tf-btn").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    const tf = btn.dataset.tf;
-    currentTF = tf === "1M" ? 30 : tf === "3M" ? 90 : 180;
-    initChart(currentSymbol, currentName);
-  });
-});
+    const symbol = btn.dataset.symbol;
+    const container = document.getElementById("tv-chart-container");
+    container.innerHTML = '';
 
-// Table row click
-document.querySelectorAll(".commodity-row").forEach(row => {
-  row.addEventListener("click", () => {
-    document.querySelectorAll(".commodity-row").forEach(r => r.classList.remove("selected"));
-    row.classList.add("selected");
+    const widgetDiv = document.createElement("div");
+    widgetDiv.className = "tradingview-widget-container";
+    widgetDiv.style.height = "100%";
+    widgetDiv.style.width = "100%";
+
+    const innerDiv = document.createElement("div");
+    innerDiv.className = "tradingview-widget-container__widget";
+    widgetDiv.appendChild(innerDiv);
+
+    const script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      "autosize": true,
+      "symbol": symbol,
+      "interval": "D",
+      "timezone": "Asia/Calcutta",
+      "theme": "dark",
+      "style": "1",
+      "locale": "en",
+      "enable_publishing": false,
+      "backgroundColor": "#0d1117",
+      "gridColor": "#161b22",
+      "hide_side_toolbar": false,
+      "allow_symbol_change": true,
+      "calendar": false,
+      "studies": ["STD;RSI", "STD;MACD"],
+      "support_host": "https://tradingview.com"
+    });
+
+    widgetDiv.appendChild(script);
+    container.appendChild(widgetDiv);
   });
 });
 
 // AI Signals
+const fmt = p => "₹" + Number(p).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const commodities = [
+  { name:"Gold", expiry:"5 Aug 2026", icon:"Au", bg:"#b45309", fg:"#fef3c7" },
+  { name:"Silver", expiry:"4 Sep 2026", icon:"Ag", bg:"#475569", fg:"#e2e8f0" },
+  { name:"Crude Oil", expiry:"19 Aug 2026", icon:"CL", bg:"#78350f", fg:"#fed7aa" },
+  { name:"Natural Gas", expiry:"26 Aug 2026", icon:"NG", bg:"#1e3a5f", fg:"#bfdbfe" }
+];
 const signals = [
   { c:commodities[0], type:"HOLD", conf:62, entry:141850, target:142500, stop:141200, rsi:54.3, rsiLabel:"Neutral", macd:"Slightly Bearish", trend:"Sideways", risk:"Low" },
   { c:commodities[1], type:"SELL", conf:74, entry:216000, target:213000, stop:218000, rsi:38.5, rsiLabel:"Oversold", macd:"Bearish", trend:"Down", risk:"Medium" },
@@ -593,12 +393,12 @@ document.getElementById("signal-grid").innerHTML = signals.map(s => `
 
 // News
 const news = [
-  { tag:"Silver", tagColor:"#475569", title:"Silver prices surge to 3-year high near ₹2,22,301 on MCX", summary:"Silver takes support from record gold levels, driven by industrial demand for solar panels and EVs.", source:"Moneycontrol", time:"2h ago" },
-  { tag:"Crude Oil", tagColor:"#78350f", title:"Crude Oil rallies on MCX amid geopolitical tensions", summary:"MCX Crude Oil up 0.37% as OPEC+ supply concerns and Middle East tensions support prices.", source:"ET Now", time:"4h ago" },
-  { tag:"Gold", tagColor:"#b45309", title:"Gold holds steady near ₹1,41,689 as dollar weakens", summary:"MCX Gold trades flat with slight bearish bias, supported by safe-haven demand and a weaker rupee.", source:"Angel One", time:"5h ago" },
-  { tag:"Natural Gas", tagColor:"#1e3a5f", title:"Natural Gas gains momentum, up 0.49% at ₹264.10", summary:"Natural Gas shows mild positive candle after opening at ₹262.50, edging toward session high.", source:"EnrichMoney", time:"6h ago" },
+  { tag:"Silver", tagColor:"#475569", title:"Silver prices surge to 3-year high on MCX", summary:"Silver takes support from record gold levels, driven by industrial demand for solar panels and EVs.", source:"Moneycontrol", time:"2h ago" },
+  { tag:"Crude Oil", tagColor:"#78350f", title:"Crude Oil rallies on MCX amid geopolitical tensions", summary:"MCX Crude Oil up as OPEC+ supply concerns and Middle East tensions support prices.", source:"ET Now", time:"4h ago" },
+  { tag:"Gold", tagColor:"#b45309", title:"Gold holds steady near record highs as dollar weakens", summary:"MCX Gold trades flat with slight bearish bias, supported by safe-haven demand and a weaker rupee.", source:"Angel One", time:"5h ago" },
+  { tag:"Natural Gas", tagColor:"#1e3a5f", title:"Natural Gas gains momentum on MCX", summary:"Natural Gas shows mild positive candle, edging toward session high on supply concerns.", source:"EnrichMoney", time:"6h ago" },
   { tag:"Market", tagColor:"#30363d", title:"MCX sees strong trading volume in energy commodities", summary:"Crude Oil and Natural Gas lead volume on MCX as traders position for geopolitical volatility.", source:"ICICI Direct", time:"8h ago" },
-  { tag:"Gold", tagColor:"#b45309", title:"Gold and silver open lower on MCX amid risk-on sentiment", summary:"Precious metals face pressure as equity markets rally, with gold down 0.06% and silver down 0.72%.", source:"ET Now", time:"1d ago" }
+  { tag:"Gold", tagColor:"#b45309", title:"Gold and silver open lower on MCX amid risk-on sentiment", summary:"Precious metals face pressure as equity markets rally, with gold down slightly and silver falling.", source:"ET Now", time:"1d ago" }
 ];
 document.getElementById("news-list").innerHTML = news.map(n => `
   <div class="news-card">
@@ -608,98 +408,6 @@ document.getElementById("news-list").innerHTML = news.map(n => `
     <div class="news-meta">${n.source} · ${n.time}</div>
   </div>
 `).join("");
-
-// === LIVE TICK-BY-TICK DATA POLLING ===
-const BACKEND_URL = 'https://arlo-c0e69fee.base44.app/functions/fetchMcxTicks';
-let prevPrices = {};
-
-async function fetchTicks() {
-  try {
-    const resp = await fetch(BACKEND_URL);
-    if (!resp.ok) return;
-    const json = await resp.json();
-    if (!json.success || !json.data) return;
-    updateLiveData(json.data);
-  } catch(e) { console.log('Tick fetch error:', e); }
-}
-
-function updateLiveData(data) {
-  // Update ticker
-  const tickerEl = document.getElementById('ticker');
-  if (tickerEl) {
-    tickerEl.innerHTML = [...data, ...data].map(c => {
-      const cls = c.pctChange >= 0 ? 'pos' : 'neg';
-      const arrow = c.pctChange >= 0 ? '▲' : '▼';
-      return '<div class="ticker-item"><span class="sym">'+c.name+'</span> '+fmt(c.ltp)+' <span class="'+cls+'">'+arrow+' '+(c.pctChange>=0?'+':'')+c.pctChange.toFixed(2)+'%</span></div>';
-    }).join('');
-  }
-
-  // Update table rows with flash animation
-  data.forEach(c => {
-    const row = document.querySelector('[data-symbol="'+c.symbol+'"]');
-    if (row) {
-      const cells = row.querySelectorAll('td');
-      const prev = prevPrices[c.symbol];
-      cells[1].textContent = fmt(c.ltp);
-      cells[2].textContent = fmt(c.open);
-      cells[3].textContent = fmt(c.ltp);
-      cells[4].textContent = fmt(c.high);
-      cells[5].textContent = fmt(c.prevClose);
-      const cls = c.pctChange >= 0 ? 'pos' : 'neg';
-      const arrow = c.pctChange >= 0 ? '▲' : '▼';
-      cells[6].className = cls;
-      cells[6].style.fontWeight = '700';
-      cells[6].textContent = arrow+' '+(c.pctChange>=0?'+':'')+c.pctChange.toFixed(2)+'%';
-      // Flash animation on LTP change
-      if (prev !== undefined && c.ltp !== prev) {
-        const flashClass = c.ltp > prev ? 'flash-up' : 'flash-down';
-        cells[1].classList.remove('flash-up','flash-down');
-        void cells[1].offsetWidth;
-        cells[1].classList.add(flashClass);
-      }
-    }
-  });
-
-  // Update OHLC bar
-  const active = data.find(c => c.symbol === currentSymbol);
-  if (active && document.getElementById('ohlc-o')) {
-    document.getElementById('ohlc-o').textContent = fmt(active.open);
-    document.getElementById('ohlc-h').textContent = fmt(active.high);
-    document.getElementById('ohlc-l').textContent = fmt(Math.min(active.open, active.ltp)*0.998);
-    document.getElementById('ohlc-c').textContent = fmt(active.ltp);
-    document.getElementById('ohlc-v').textContent = (Math.floor(Math.random()*50)+30)+'K';
-    const cls = active.pctChange >= 0 ? 'pos' : 'neg';
-    const arrow = active.pctChange >= 0 ? '▲' : '▼';
-    document.getElementById('chart-change').innerHTML = '<span class="'+cls+'">'+arrow+' '+fmt(Math.abs(active.change))+' ('+(active.pctChange>=0?'+':'')+active.pctChange.toFixed(2)+'%)</span>';
-  }
-
-  // Update stats
-  const gainers = data.filter(c => c.pctChange >= 0).length;
-  const losers = data.filter(c => c.pctChange < 0).length;
-  const tiles = document.querySelectorAll('.stat-tile');
-  if (tiles.length >= 2) {
-    tiles[0].querySelector('.val').textContent = gainers;
-    tiles[1].querySelector('.val').textContent = losers;
-  }
-
-  // Update chart last candle close
-  if (candleSeries && chart && active) {
-    const allData = candleSeries.data();
-    if (allData.length > 0) {
-      const lastBar = allData[allData.length - 1];
-      lastBar.close = active.ltp;
-      lastBar.high = Math.max(lastBar.high, active.ltp);
-      candleSeries.update(lastBar);
-    }
-  }
-
-  // Store prev prices
-  data.forEach(c => prevPrices[c.symbol] = c.ltp);
-}
-
-// Start polling every 3 seconds
-fetchTicks();
-setInterval(fetchTicks, 3000);
 </script>
 </body>
 </html>
