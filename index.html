@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCX Commodity Screener</title>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --card: #161b22;
+  --border: #21262d;
+  --text: #e6edf3;
+  --muted: #7d8590;
+  --gold: #f59e0b;
+  --green: #34d399;
+  --red: #fb7185;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, system-ui, sans-serif; }
+body { background: var(--bg); color: var(--text); min-height: 100vh; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* Ticker */
+.ticker-wrap { overflow: hidden; background: var(--card); border-bottom: 1px solid var(--border); padding: 8px 0; }
+.ticker-track { display: inline-flex; gap: 36px; white-space: nowrap; animation: scroll 28s linear infinite; padding: 0 16px; }
+@keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+.ticker-item { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.ticker-item .sym { color: var(--muted); font-weight: 600; }
+.pos { color: var(--green); } .neg { color: var(--red); }
+
+/* Top nav tabs */
+.nav-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding: 0 4px; margin-bottom: 14px; }
+.nav-tab { padding: 9px 20px; border: 1px solid transparent; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; border-radius: 8px 8px 0 0; transition: all .3s ease; position: relative; top: 1px; }
+.nav-tab:hover { background: var(--card); border-color: var(--border); box-shadow: 0 -4px 18px rgba(245,158,11,.3), 0 0 25px rgba(245,158,11,.1); color: var(--gold); transform: translateY(-1px); }
+.nav-tab.active { background: var(--card); border-color: var(--border); color: var(--gold); }
+.nav-tab.active::after { content: ''; position: absolute; bottom: -2px; left: 0; right: 0; height: 2px; background: var(--gold); box-shadow: 0 0 10px rgba(245,158,11,.8), 0 0 18px rgba(245,158,11,.4); }
+
+/* Header */
+.header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 10px; }
+.header h1 { font-size: 18px; font-weight: 700; letter-spacing: -.01em; }
+.header p { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(52,211,153,.5); } 50% { opacity: .7; box-shadow: 0 0 0 5px rgba(52,211,153,0); } }
+
+/* Stats */
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 0 16px 14px; }
+.stat-tile { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.stat-tile .label { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.stat-tile .val { font-size: 20px; font-weight: 700; margin-top: 4px; }
+.stat-tile .sub { font-size: 12px; font-weight: 600; margin-top: 2px; }
+
+/* Main grid */
+.main-grid { display: grid; grid-template-columns: 1.8fr 1fr; gap: 14px; padding: 0 16px 14px; }
+@media(max-width:768px){ .main-grid { grid-template-columns: 1fr; } .stats-grid { grid-template-columns: 1fr 1fr; } }
+
+/* Chart */
+.chart-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.chart-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.chart-badge { font-size: 10px; font-weight: 600; color: var(--muted); background: var(--bg); padding: 2px 7px; border-radius: 4px; }
+#tv_chart { width: 100%; height: 400px; }
+.chart-selector { display: flex; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.sel-btn { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: all .2s; }
+.sel-btn:hover { border-color: var(--gold); color: var(--gold); box-shadow: 0 0 12px rgba(245,158,11,.2); }
+.sel-btn.active { background: var(--gold); color: var(--bg); border-color: var(--gold); }
+
+/* Table */
+.table-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 0 16px 14px; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: right; padding: 9px 12px; font-size: 10.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); }
+th:first-child { text-align: left; }
+td { text-align: right; padding: 12px; font-size: 13px; border-bottom: 1px solid #1c2128; }
+td:first-child { text-align: left; }
+tbody tr { transition: background .2s; cursor: pointer; }
+tbody tr:hover { background: #1c2128; }
+tr.selected { background: rgba(245,158,11,.06); }
+.row-hidden { display: none; }
+
+/* Commodity icon */
+.cmd-icon { width: 28px; height: 28px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+
+/* Sections */
+.section { display: none; }
+.section.active { display: block; }
+
+/* Signal cards */
+.signal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px 14px; }
+@media(max-width:768px){ .signal-grid { grid-template-columns: 1fr; } }
+.signal-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.signal-badge { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: .03em; }
+.signal-buy { background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
+.signal-sell { background: rgba(251,113,133,.15); color: var(--red); border: 1px solid rgba(251,113,133,.3); }
+.signal-hold { background: rgba(245,158,11,.15); color: var(--gold); border: 1px solid rgba(245,158,11,.3); }
+.confidence-bar { height: 6px; border-radius: 3px; background: var(--border); margin-top: 8px; overflow: hidden; }
+.confidence-fill { height: 100%; border-radius: 3px; transition: width .5s; }
+.ind-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1c2128; font-size: 12px; }
+.ind-row:last-child { border: none; }
+.ind-row .ind-label { color: var(--muted); }
+.ind-row .ind-val { font-weight: 600; }
+
+/* News cards */
+.news-list { padding: 0 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+.news-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: all .2s; }
+.news-card:hover { border-color: var(--gold); box-shadow: 0 0 14px rgba(245,158,11,.12); }
+.news-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-bottom: 6px; }
+.news-title { font-size: 14px; font-weight: 600; }
+.news-summary { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.news-meta { font-size: 11px; color: var(--muted); margin-top: 8px; }
+
+/* Bottom nav */
+.bottom-nav { position: sticky; bottom: 0; display: flex; justify-content: space-around; background: rgba(22,27,34,.95); backdrop-filter: blur(10px); border-top: 1px solid var(--border); padding: 8px 8px 12px; z-index: 100; border-radius: 16px 16px 0 0; margin: 0 16px; }
+.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; cursor: pointer; color: var(--muted); transition: all .3s ease; border-radius: 10px; position: relative; }
+.nav-item:hover { color: var(--gold); background: rgba(245,158,11,.08); box-shadow: 0 0 16px rgba(245,158,11,.25), inset 0 0 12px rgba(245,158,11,.05); transform: translateY(-2px); }
+.nav-item.active { color: var(--gold); }
+.nav-item.active::before { content: ''; position: absolute; top: -8px; left: 50%; transform: translateX(-50%); width: 32px; height: 3px; background: var(--gold); border-radius: 0 0 3px 3px; box-shadow: 0 0 10px rgba(245,158,11,.8), 0 0 18px rgba(245,158,11,.4); }
+.nav-item svg { filter: drop-shadow(0 0 0 transparent); transition: filter .3s; }
+.nav-item.active svg { filter: drop-shadow(0 0 6px rgba(245,158,11,.6)); }
+.nav-item span { font-size: 10px; font-weight: 600; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+
+.footer { text-align: center; font-size: 10px; color: #484f58; padding: 10px 16px 20px; }
+</style>
+</head>
+<body>
+
+<!-- Ticker -->
+<div class="ticker-wrap">
+  <div class="ticker-track" id="ticker"></div>
+</div>
+
+<!-- HOME -->
+<div class="section active" id="section-home">
+  <div class="header">
+    <div>
+      <h1>MCX Commodity Screener</h1>
+      <p>Live Indian Commodity Market · Multi Commodity Exchange</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="display:flex;align-items:center;gap:6px;"><span class="pulse-dot"></span><span style="font-size:11px;font-weight:700;color:var(--green);letter-spacing:.05em;">LIVE</span></div>
+      <span style="font-size:11px;color:var(--muted);">Market Open · 30 Jul 2026</span>
+    </div>
+  </div>
+
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-filter="all">All</button>
+    <button class="nav-tab" data-filter="metals">Metals</button>
+    <button class="nav-tab" data-filter="energy">Energy</button>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-tile"><div class="label">Gainers</div><div class="val pos">2</div></div>
+    <div class="stat-tile"><div class="label">Losers</div><div class="val neg">2</div></div>
+    <div class="stat-tile"><div class="label">Top Gainer</div><div class="sub" style="color:var(--text);margin-top:4px;">Natural Gas</div><div class="sub pos">+0.49%</div></div>
+    <div class="stat-tile"><div class="label">Top Loser</div><div class="sub" style="color:var(--text);margin-top:4px;">Silver</div><div class="sub neg">-0.72%</div></div>
+  </div>
+
+  <div class="table-card">
+    <table>
+      <thead><tr>
+        <th>Commodity</th><th>LTP</th><th>Open</th><th>Close</th><th>High</th><th>Prev Close</th><th>% Change</th><th>Trend</th>
+      </tr></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- CHART -->
+<div class="section" id="section-chart">
+  <div class="header">
+    <div><h1>Chart</h1><p>Candlestick · Powered by TradingView Lightweight Charts</p></div>
+    <span style="font-size:11px;color:var(--muted);">Daily · INR</span>
+  </div>
+  <div class="chart-card" style="margin:0 16px 14px;">
+    <div class="chart-selector" id="chart-selector"></div>
+    <div class="chart-header">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span id="chart-title" style="font-size:14px;font-weight:600;">Gold</span>
+        <span class="chart-badge">MCX</span>
+      </div>
+      <span style="font-size:10px;color:var(--muted);">TradingView Lightweight Charts™</span>
+    </div>
+    <div id="tv_chart"></div>
+  </div>
+</div>
+
+<!-- AI SIGNAL -->
+<div class="section" id="section-signal">
+  <div class="header">
+    <div><h1>AI Signal</h1><p>Algorithmic trading signals based on technical indicators</p></div>
+    <span style="font-size:11px;color:var(--muted);">Updated: 11:43 IST</span>
+  </div>
+  <div class="signal-grid" id="signal-grid"></div>
+</div>
+
+<!-- NEWS -->
+<div class="section" id="section-news">
+  <div class="header">
+    <div><h1>News</h1><p>Latest commodity market headlines</p></div>
+    <span style="font-size:11px;color:var(--muted);">30 Jul 2026</span>
+  </div>
+  <div class="news-list" id="news-list"></div>
+</div>
+
+<!-- Bottom Nav -->
+<div class="bottom-nav">
+  <div class="nav-item active" data-section="home">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    <span>Home</span>
+  </div>
+  <div class="nav-item" data-section="chart">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
+    <span>Chart</span>
+  </div>
+  <div class="nav-item" data-section="signal">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9z"/></svg>
+    <span>AI Signal</span>
+  </div>
+  <div class="nav-item" data-section="news">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8z"/></svg>
+    <span>News</span>
+  </div>
+</div>
+
+<div class="footer">Data: MCX via Angel One · Chart: TradingView Lightweight Charts™ · For informational purposes only. Not investment advice.</div>
+
+<script>
+const commodities = [
+  { name:"Gold", symbol:"MCX:GOLD1!", ltp:141689, open:141850, close:141689, high:141925, prevClose:141781, change:-92, pct:-0.06, expiry:"5 Aug 2026", lot:"100", cat:"metals", icon:"Au", bg:"#b45309", fg:"#fef3c7", spark:[8,6,9,7,10,8,11,9,13], dir:"down" },
+  { name:"Silver", symbol:"MCX:SILVER1!", ltp:215912, open:217500, close:215912, high:217850, prevClose:217479, change:-1567, pct:-0.72, expiry:"4 Sep 2026", lot:"30", cat:"metals", icon:"Ag", bg:"#475569", fg:"#e2e8f0", spark:[4,6,5,8,7,11,10,14,17], dir:"down" },
+  { name:"Crude Oil", symbol:"MCX:CRUDEOIL1!", ltp:8144, open:8098, close:8144, high:8188, prevClose:8114, change:30, pct:0.37, expiry:"19 Aug 2026", lot:"100", cat:"energy", icon:"CL", bg:"#78350f", fg:"#fed7aa", spark:[16,14,15,11,12,9,7,6,4], dir:"up" },
+  { name:"Natural Gas", symbol:"MCX:NATURALGAS1!", ltp:264.10, open:262.50, close:264.10, high:264.50, prevClose:262.80, change:1.30, pct:0.49, expiry:"26 Aug 2026", lot:"1250", cat:"energy", icon:"NG", bg:"#1e3a5f", fg:"#bfdbfe", spark:[15,13,14,10,11,8,6,7,4], dir:"up" }
+];
+
+const fmt = p => "₹" + Number(p).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Ticker
+function buildTicker() {
+  const items = [...commodities, ...commodities].map(c => {
+    const cls = c.pct >= 0 ? "pos" : "neg";
+    const arrow = c.pct >= 0 ? "▲" : "▼";
+    return `<div class="ticker-item"><span class="sym">${c.name}</span> ${fmt(c.ltp)} <span class="${cls}">${arrow} ${c.pct>=0?"+":""}${c.pct.toFixed(2)}%</span></div>`;
+  }).join("");
+  document.getElementById("ticker").innerHTML = items;
+}
+buildTicker();
+
+// Sparkline
+function sparkline(data, dir) {
+  const w=80,h=24,max=Math.max(...data),min=Math.min(...data),r=max-min||1;
+  const pts = data.map((v,i)=>{const x=(i/(data.length-1))*w;const y=h-((v-min)/r)*h;return x.toFixed(1)+","+y.toFixed(1)}).join(" ");
+  const c = dir==="up"?"#34d399":"#fb7185";
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:inline-block;vertical-align:middle"><polyline points="0,${h} ${pts} ${w},${h}" fill="${c}" fill-opacity="0.08" stroke="none"/><polyline points="${pts}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+// Table
+const tbody = document.getElementById("table-body");
+commodities.forEach((c,i)=>{
+  const cls = c.pct>=0?"pos":"neg", arrow = c.pct>=0?"▲":"▼";
+  const tr = document.createElement("tr");
+  tr.className = "commodity-row" + (i===0?" selected":"");
+  tr.dataset.symbol = c.symbol; tr.dataset.cat = c.cat; tr.dataset.name = c.name;
+  tr.innerHTML = `<td><div style="display:flex;align-items:center;gap:10px"><span class="cmd-icon" style="background:${c.bg};color:${c.fg}">${c.icon}</span><div><div style="font-size:13px;font-weight:600">${c.name}</div><div style="font-size:10px;color:var(--muted)">Exp: ${c.expiry} · Lot: ${c.lot}</div></div></div></td>
+  <td style="font-weight:600">${fmt(c.ltp)}</td><td>${fmt(c.open)}</td><td>${fmt(c.close)}</td><td>${fmt(c.high)}</td><td style="color:var(--muted)">${fmt(c.prevClose)}</td>
+  <td class="${cls}" style="font-weight:700">${arrow} ${c.pct>=0?"+":""}${c.pct.toFixed(2)}%</td><td>${sparkline(c.spark,c.dir)}</td>`;
+  tbody.appendChild(tr);
+});
+
+// Chart selector buttons
+document.getElementById("chart-selector").innerHTML = commodities.map((c,i)=>`<button class="sel-btn${i===0?" active":""}" data-symbol="${c.symbol}" data-name="${c.name}">${c.name}</button>`).join("");
+
+// Candlestick data generator
+function genCandles(c) {
+  const days=60, out=[], start=new Date(); start.setDate(start.getDate()-days);
+  let price = c.ltp*0.93, trend=(c.ltp-price)/days;
+  for(let i=0;i<days;i++){
+    const d=new Date(start); d.setDate(start.getDate()+i);
+    const ds=d.toISOString().split("T")[0];
+    if(i===days-1){
+      const low=Math.min(c.open,c.prevClose)*0.997;
+      out.push({time:ds,open:c.open,high:c.high,low:Math.round(low*100)/100,close:c.ltp});
+    } else {
+      const vol=price*0.012, noise=(Math.sin(i*7.3)+Math.cos(i*3.1))*vol*0.3, ch=trend+noise+(Math.random()-0.5)*vol;
+      const close=price+ch, o=price;
+      const h=Math.max(o,close)+Math.random()*vol*0.6, l=Math.min(o,close)-Math.random()*vol*0.6;
+      out.push({time:ds,open:Math.round(o*100)/100,high:Math.round(h*100)/100,low:Math.round(l*100)/100,close:Math.round(close*100)/100});
+      price=close;
+    }
+  }
+  return out;
+}
+
+let chart=null, candleSeries=null, volSeries=null, chartInited=false;
+function initChart(symbol, name) {
+  const container=document.getElementById("tv_chart");
+  container.innerHTML="";
+  const c = commodities.find(x=>x.symbol===symbol);
+  chart = LightweightCharts.createChart(container, {
+    layout:{background:{color:"#0d1117"},textColor:"#7d8590"},
+    grid:{vertLines:{color:"#161b22"},horzLines:{color:"#161b22"}},
+    timeScale:{borderColor:"#21262d"},
+    rightPriceScale:{borderColor:"#21262d"},
+    crosshair:{mode:0},
+    watermark:{text:name,color:"rgba(125,133,144,0.08)",fontSize:48}
+  });
+  candleSeries = chart.addCandlestickSeries({
+    upColor:"#34d399",downColor:"#fb7185",borderUpColor:"#34d399",borderDownColor:"#fb7185",wickUpColor:"#34d399",wickDownColor:"#fb7185"
+  });
+  const data = genCandles(c);
+  candleSeries.setData(data);
+  volSeries = chart.addHistogramSeries({priceFormat:{type:"volume"},priceScaleId:"vol",color:"rgba(125,133,144,0.3)"});
+  volSeries.priceScale().applyOptions({scaleMargins:{top:0.8,bottom:0}});
+  volSeries.setData(data.map(d=>({time:d.time,value:Math.random()*80000+40000,color:d.close>=d.open?"rgba(52,211,153,0.25)":"rgba(251,113,133,0.25)"})));
+  chart.timeScale().fitContent();
+  document.getElementById("chart-title").textContent = name;
+}
+
+// Section switching
+document.querySelectorAll(".nav-item").forEach(item=>{
+  item.addEventListener("click",()=>{
+    document.querySelectorAll(".nav-item").forEach(i=>i.classList.remove("active"));
+    item.classList.add("active");
+    const sec=item.dataset.section;
+    document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
+    document.getElementById("section-"+sec).classList.add("active");
+    if(sec==="chart"&&!chartInited){initChart("MCX:GOLD1!","Gold");chartInited=true;}
+    if(sec==="chart"&&chart){setTimeout(()=>chart.applyOptions({width:document.getElementById("tv_chart").clientWidth}),50);}
+  });
+});
+
+// Top nav tabs
+document.querySelectorAll(".nav-tab").forEach(tab=>{
+  tab.addEventListener("click",()=>{
+    document.querySelectorAll(".nav-tab").forEach(t=>t.classList.remove("active"));
+    tab.classList.add("active");
+    const f=tab.dataset.filter;
+    document.querySelectorAll(".commodity-row").forEach(row=>{
+      row.classList.toggle("row-hidden", f!=="all" && row.dataset.cat!==f);
+    });
+  });
+});
+
+// Chart selector
+document.querySelectorAll(".sel-btn").forEach(btn=>{
+  btn.addEventListener("click",()=>{
+    document.querySelectorAll(".sel-btn").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    initChart(btn.dataset.symbol, btn.dataset.name);
+  });
+});
+
+// Table row click
+document.querySelectorAll(".commodity-row").forEach(row=>{
+  row.addEventListener("click",()=>{
+    document.querySelectorAll(".commodity-row").forEach(r=>r.classList.remove("selected"));
+    row.classList.add("selected");
+  });
+});
+
+// AI Signals
+const signals = [
+  { c:commodities[0], type:"HOLD", conf:62, entry:141850, target:142500, stop:141200, rsi:54.3, rsiLabel:"Neutral", macd:"Slightly Bearish", trend:"Sideways", risk:"Low" },
+  { c:commodities[1], type:"SELL", conf:74, entry:216000, target:213000, stop:218000, rsi:38.5, rsiLabel:"Oversold", macd:"Bearish", trend:"Down", risk:"Medium" },
+  { c:commodities[2], type:"BUY", conf:81, entry:8100, target:8350, stop:8050, rsi:62.1, rsiLabel:"Bullish", macd:"Bullish", trend:"Up", risk:"Medium" },
+  { c:commodities[3], type:"BUY", conf:76, entry:263, target:268, stop:260, rsi:58.7, rsiLabel:"Bullish", macd:"Bullish", trend:"Up", risk:"High" }
+];
+const sClass = {BUY:"signal-buy",SELL:"signal-sell",HOLD:"signal-hold"};
+const sColor = {BUY:"var(--green)",SELL:"var(--red)",HOLD:"var(--gold)"};
+document.getElementById("signal-grid").innerHTML = signals.map(s=>`
+  <div class="signal-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px"><span class="cmd-icon" style="background:${s.c.bg};color:${s.c.fg}">${s.c.icon}</span><div><div style="font-size:14px;font-weight:600">${s.c.name}</div><div style="font-size:10px;color:var(--muted)">MCX · Exp ${s.c.expiry}</div></div></div>
+      <span class="signal-badge ${sClass[s.type]}">${s.type}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">
+      <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">Entry</div><div style="font-size:13px;font-weight:700;margin-top:2px">${fmt(s.entry)}</div></div>
+      <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">Target</div><div style="font-size:13px;font-weight:700;margin-top:2px;color:var(--green)">${fmt(s.target)}</div></div>
+      <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase">Stop</div><div style="font-size:13px;font-weight:700;margin-top:2px;color:var(--red)">${fmt(s.stop)}</div></div>
+    </div>
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Confidence: ${s.conf}%</div>
+    <div class="confidence-bar"><div class="confidence-fill" style="width:${s.conf}%;background:${sColor[s.type]}"></div></div>
+    <div style="margin-top:12px">
+      <div class="ind-row"><span class="ind-label">RSI (14)</span><span class="ind-val">${s.rsi} · ${s.rsiLabel}</span></div>
+      <div class="ind-row"><span class="ind-label">MACD</span><span class="ind-val">${s.macd}</span></div>
+      <div class="ind-row"><span class="ind-label">Trend</span><span class="ind-val">${s.trend}</span></div>
+      <div class="ind-row"><span class="ind-label">Risk Level</span><span class="ind-val">${s.risk}</span></div>
+    </div>
+  </div>
+`).join("");
+
+// News
+const news = [
+  { tag:"Silver", tagColor:"#475569", title:"Silver prices surge to 3-year high near ₹2,22,301 on MCX", summary:"Silver takes support from record gold levels, driven by industrial demand for solar panels and EVs.", source:"Moneycontrol", time:"2h ago" },
+  { tag:"Crude Oil", tagColor:"#78350f", title:"Crude Oil rallies on MCX amid geopolitical tensions", summary:"MCX Crude Oil up 0.37% as OPEC+ supply concerns and Middle East tensions support prices.", source:"ET Now", time:"4h ago" },
+  { tag:"Gold", tagColor:"#b45309", title:"Gold holds steady near ₹1,41,689 as dollar weakens", summary:"MCX Gold trades flat with slight bearish bias, supported by safe-haven demand and a weaker rupee.", source:"Angel One", time:"5h ago" },
+  { tag:"Natural Gas", tagColor:"#1e3a5f", title:"Natural Gas gains momentum, up 0.49% at ₹264.10", summary:"Natural Gas shows mild positive candle after opening at ₹262.50, edging toward session high.", source:"EnrichMoney", time:"6h ago" },
+  { tag:"Market", tagColor:"#30363d", title:"MCX sees strong trading volume in energy commodities", summary:"Crude Oil and Natural Gas lead volume on MCX as traders position for geopolitical volatility.", source:"ICICI Direct", time:"8h ago" },
+  { tag:"Gold", tagColor:"#b45309", title:"Gold and silver open lower on MCX amid risk-on sentiment", summary:"Precious metals face pressure as equity markets rally, with gold down 0.06% and silver down 0.72%.", source:"ET Now", time:"1d ago" }
+];
+document.getElementById("news-list").innerHTML = news.map(n=>`
+  <div class="news-card">
+    <span class="news-tag" style="background:${n.tagColor};color:#fff">${n.tag}</span>
+    <div class="news-title">${n.title}</div>
+    <div class="news-summary">${n.summary}</div>
+    <div class="news-meta">${n.source} · ${n.time}</div>
+  </div>
+`).join("");
+</script>
+</body>
+</html>
