@@ -4,7 +4,99 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MCX Commodity Screener</title>
-<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js">
+// === LIVE TICK-BY-TICK DATA POLLING ===
+const BACKEND_URL = 'https://arlo-c0e69fee.base44.app/functions/fetchMcxTicks';
+let prevPrices = {};
+
+async function fetchTicks() {
+  try {
+    const resp = await fetch(BACKEND_URL);
+    if (!resp.ok) return;
+    const json = await resp.json();
+    if (!json.success || !json.data) return;
+    updateLiveData(json.data);
+  } catch(e) { console.log('Tick fetch error:', e); }
+}
+
+function updateLiveData(data) {
+  // Update ticker
+  const tickerEl = document.getElementById('ticker');
+  if (tickerEl) {
+    tickerEl.innerHTML = [...data, ...data].map(c => {
+      const cls = c.pctChange >= 0 ? 'pos' : 'neg';
+      const arrow = c.pctChange >= 0 ? '▲' : '▼';
+      return '<div class="ticker-item"><span class="sym">'+c.name+'</span> '+fmt(c.ltp)+' <span class="'+cls+'">'+arrow+' '+(c.pctChange>=0?'+':'')+c.pctChange.toFixed(2)+'%</span></div>';
+    }).join('');
+  }
+
+  // Update table rows with flash animation
+  data.forEach(c => {
+    const row = document.querySelector('[data-symbol="'+c.symbol+'"]');
+    if (row) {
+      const cells = row.querySelectorAll('td');
+      const prev = prevPrices[c.symbol];
+      cells[1].textContent = fmt(c.ltp);
+      cells[2].textContent = fmt(c.open);
+      cells[3].textContent = fmt(c.ltp);
+      cells[4].textContent = fmt(c.high);
+      cells[5].textContent = fmt(c.prevClose);
+      const cls = c.pctChange >= 0 ? 'pos' : 'neg';
+      const arrow = c.pctChange >= 0 ? '▲' : '▼';
+      cells[6].className = cls;
+      cells[6].style.fontWeight = '700';
+      cells[6].textContent = arrow+' '+(c.pctChange>=0?'+':'')+c.pctChange.toFixed(2)+'%';
+      // Flash animation on LTP change
+      if (prev !== undefined && c.ltp !== prev) {
+        const flashClass = c.ltp > prev ? 'flash-up' : 'flash-down';
+        cells[1].classList.remove('flash-up','flash-down');
+        void cells[1].offsetWidth;
+        cells[1].classList.add(flashClass);
+      }
+    }
+  });
+
+  // Update OHLC bar
+  const active = data.find(c => c.symbol === currentSymbol);
+  if (active && document.getElementById('ohlc-o')) {
+    document.getElementById('ohlc-o').textContent = fmt(active.open);
+    document.getElementById('ohlc-h').textContent = fmt(active.high);
+    document.getElementById('ohlc-l').textContent = fmt(Math.min(active.open, active.ltp)*0.998);
+    document.getElementById('ohlc-c').textContent = fmt(active.ltp);
+    document.getElementById('ohlc-v').textContent = (Math.floor(Math.random()*50)+30)+'K';
+    const cls = active.pctChange >= 0 ? 'pos' : 'neg';
+    const arrow = active.pctChange >= 0 ? '▲' : '▼';
+    document.getElementById('chart-change').innerHTML = '<span class="'+cls+'">'+arrow+' '+fmt(Math.abs(active.change))+' ('+(active.pctChange>=0?'+':'')+active.pctChange.toFixed(2)+'%)</span>';
+  }
+
+  // Update stats
+  const gainers = data.filter(c => c.pctChange >= 0).length;
+  const losers = data.filter(c => c.pctChange < 0).length;
+  const tiles = document.querySelectorAll('.stat-tile');
+  if (tiles.length >= 2) {
+    tiles[0].querySelector('.val').textContent = gainers;
+    tiles[1].querySelector('.val').textContent = losers;
+  }
+
+  // Update chart last candle close
+  if (candleSeries && chart && active) {
+    const allData = candleSeries.data();
+    if (allData.length > 0) {
+      const lastBar = allData[allData.length - 1];
+      lastBar.close = active.ltp;
+      lastBar.high = Math.max(lastBar.high, active.ltp);
+      candleSeries.update(lastBar);
+    }
+  }
+
+  // Store prev prices
+  data.forEach(c => prevPrices[c.symbol] = c.ltp);
+}
+
+// Start polling every 3 seconds
+fetchTicks();
+setInterval(fetchTicks, 3000);
+</script>
 <style>
 :root {
   --bg: #0d1117;
@@ -134,6 +226,13 @@ tr.selected { background: rgba(245,158,11,.06); }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
 .footer { text-align: center; font-size: 10px; color: #484f58; padding: 10px 16px 20px; }
+
+/* Live tick flash */
+@keyframes flash-up { 0% { background: rgba(52,211,153,.2); } 100% { background: transparent; } }
+@keyframes flash-down { 0% { background: rgba(251,113,133,.2); } 100% { background: transparent; } }
+.flash-up { animation: flash-up .4s ease; }
+.flash-down { animation: flash-down .4s ease; }
+.live-badge { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
 </style>
 </head>
 <body>
@@ -509,6 +608,98 @@ document.getElementById("news-list").innerHTML = news.map(n => `
     <div class="news-meta">${n.source} · ${n.time}</div>
   </div>
 `).join("");
+
+// === LIVE TICK-BY-TICK DATA POLLING ===
+const BACKEND_URL = 'https://arlo-c0e69fee.base44.app/functions/fetchMcxTicks';
+let prevPrices = {};
+
+async function fetchTicks() {
+  try {
+    const resp = await fetch(BACKEND_URL);
+    if (!resp.ok) return;
+    const json = await resp.json();
+    if (!json.success || !json.data) return;
+    updateLiveData(json.data);
+  } catch(e) { console.log('Tick fetch error:', e); }
+}
+
+function updateLiveData(data) {
+  // Update ticker
+  const tickerEl = document.getElementById('ticker');
+  if (tickerEl) {
+    tickerEl.innerHTML = [...data, ...data].map(c => {
+      const cls = c.pctChange >= 0 ? 'pos' : 'neg';
+      const arrow = c.pctChange >= 0 ? '▲' : '▼';
+      return '<div class="ticker-item"><span class="sym">'+c.name+'</span> '+fmt(c.ltp)+' <span class="'+cls+'">'+arrow+' '+(c.pctChange>=0?'+':'')+c.pctChange.toFixed(2)+'%</span></div>';
+    }).join('');
+  }
+
+  // Update table rows with flash animation
+  data.forEach(c => {
+    const row = document.querySelector('[data-symbol="'+c.symbol+'"]');
+    if (row) {
+      const cells = row.querySelectorAll('td');
+      const prev = prevPrices[c.symbol];
+      cells[1].textContent = fmt(c.ltp);
+      cells[2].textContent = fmt(c.open);
+      cells[3].textContent = fmt(c.ltp);
+      cells[4].textContent = fmt(c.high);
+      cells[5].textContent = fmt(c.prevClose);
+      const cls = c.pctChange >= 0 ? 'pos' : 'neg';
+      const arrow = c.pctChange >= 0 ? '▲' : '▼';
+      cells[6].className = cls;
+      cells[6].style.fontWeight = '700';
+      cells[6].textContent = arrow+' '+(c.pctChange>=0?'+':'')+c.pctChange.toFixed(2)+'%';
+      // Flash animation on LTP change
+      if (prev !== undefined && c.ltp !== prev) {
+        const flashClass = c.ltp > prev ? 'flash-up' : 'flash-down';
+        cells[1].classList.remove('flash-up','flash-down');
+        void cells[1].offsetWidth;
+        cells[1].classList.add(flashClass);
+      }
+    }
+  });
+
+  // Update OHLC bar
+  const active = data.find(c => c.symbol === currentSymbol);
+  if (active && document.getElementById('ohlc-o')) {
+    document.getElementById('ohlc-o').textContent = fmt(active.open);
+    document.getElementById('ohlc-h').textContent = fmt(active.high);
+    document.getElementById('ohlc-l').textContent = fmt(Math.min(active.open, active.ltp)*0.998);
+    document.getElementById('ohlc-c').textContent = fmt(active.ltp);
+    document.getElementById('ohlc-v').textContent = (Math.floor(Math.random()*50)+30)+'K';
+    const cls = active.pctChange >= 0 ? 'pos' : 'neg';
+    const arrow = active.pctChange >= 0 ? '▲' : '▼';
+    document.getElementById('chart-change').innerHTML = '<span class="'+cls+'">'+arrow+' '+fmt(Math.abs(active.change))+' ('+(active.pctChange>=0?'+':'')+active.pctChange.toFixed(2)+'%)</span>';
+  }
+
+  // Update stats
+  const gainers = data.filter(c => c.pctChange >= 0).length;
+  const losers = data.filter(c => c.pctChange < 0).length;
+  const tiles = document.querySelectorAll('.stat-tile');
+  if (tiles.length >= 2) {
+    tiles[0].querySelector('.val').textContent = gainers;
+    tiles[1].querySelector('.val').textContent = losers;
+  }
+
+  // Update chart last candle close
+  if (candleSeries && chart && active) {
+    const allData = candleSeries.data();
+    if (allData.length > 0) {
+      const lastBar = allData[allData.length - 1];
+      lastBar.close = active.ltp;
+      lastBar.high = Math.max(lastBar.high, active.ltp);
+      candleSeries.update(lastBar);
+    }
+  }
+
+  // Store prev prices
+  data.forEach(c => prevPrices[c.symbol] = c.ltp);
+}
+
+// Start polling every 3 seconds
+fetchTicks();
+setInterval(fetchTicks, 3000);
 </script>
 </body>
 </html>
